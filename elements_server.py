@@ -1,22 +1,22 @@
 import pygame
 import time
 import random
-
+import socket
+import threading
+import json
 
 WIDTH, HEIGHT = 800, 800
 GRID_W = 20
 
 el_selected = 1
 
-mouse_pos = (0,0)
+mouse_pos = (0, 0)
 
 grid = []
 
 has_updated = False
 
 elements = ["nothing", "sand", "water", "block", "cloud"]
-
-
 
 class Element:
     def __init__(self, element_type):
@@ -32,15 +32,67 @@ class Element:
         else:
             self.is_liquid = False
 
-    
+# Initialize grid as list of columns, each containing rows (grid[col][row])
+grid = []
+for x in range(GRID_W):  # columns
+    col = []
+    for y in range(GRID_W):  # rows
+        col.append(Element("nothing"))
+    grid.append(col)
 
-        
+# Threading lock for grid access
+lock = threading.Lock()
 
-for y in range(GRID_W):
-    grid_tmp = []
-    for x in range(GRID_W):
-        grid_tmp.append(Element("nothing"))
-    grid.append(grid_tmp)
+# List of connected clients
+clients = []
+
+# Function to handle client connections
+def handle_client(conn, addr):
+    print(f"Connected by {addr}")
+    with conn:
+        conn.setblocking(False)  # Non-blocking to avoid hanging
+        while True:
+            try:
+                data = conn.recv(1024)
+                if not data:
+                    break
+                msg = json.loads(data.decode('utf-8'))
+                if msg.get('action') == 'place':
+                    col = msg.get('x')
+                    row = msg.get('y')
+                    el_type = msg.get('element')
+                    if 0 <= col < GRID_W and 0 <= row < GRID_W and el_type in elements:
+                        with lock:
+                            grid[col][row] = Element(el_type)
+            except json.JSONDecodeError:
+                pass
+            except BlockingIOError:
+                time.sleep(0.01)  # Small sleep to prevent CPU spin
+            except Exception as e:
+                print(f"Error handling client {addr}: {e}")
+                break
+    with lock:
+        if conn in clients:
+            clients.remove(conn)
+
+# Start server in a separate thread
+def start_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(('0.0.0.0', 6001))
+    server.listen(5)
+    server.setblocking(False)
+    print("Server listening on port 6001")
+    while True:
+        try:
+            conn, addr = server.accept()
+            with lock:
+                clients.append(conn)
+            thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
+            thread.start()
+        except BlockingIOError:
+            time.sleep(0.01)
+
+threading.Thread(target=start_server, daemon=True).start()
 
 pygame.init()
 font = pygame.font.Font(None, 36)
@@ -59,38 +111,38 @@ while running:
     
     keys = pygame.key.get_pressed()
     if keys[pygame.K_h]:
-        el_selected = (el_selected + 1) % 5
+        el_selected = (el_selected + 1) % len(elements)
         
 
-    window.fill((0,0,0))
+    window.fill((0, 0, 0))
 
-    for y in range(GRID_W):
-        for x in range(GRID_W):
-            if grid[x][y].element_type == "sand":
-                color = (100, 100, 10)
-            elif grid[x][y].element_type == "water":
-                color = (0,0,255)
-            elif grid[x][y].element_type == "block":
-                color = (100,100,100)
-            elif grid[x][y].element_type == "cloud":
-                color = (250, 114, 64)
-            else:
-                color = (15, 15, 15)
-            
-            Pix_S = WIDTH / GRID_W
-            x_draw = int(Pix_S * x)
-            y_draw = int(Pix_S * y)
-            pygame.draw.rect(window, color, (x_draw, y_draw, Pix_S, Pix_S))
+    with lock:
+        for y in range(GRID_W):
+            for x in range(GRID_W):
+                el_type = grid[x][y].element_type
+                if el_type == "sand":
+                    color = (100, 100, 10)
+                elif el_type == "water":
+                    color = (0, 0, 255)
+                elif el_type == "block":
+                    color = (100, 100, 100)
+                elif el_type == "cloud":
+                    color = (250, 114, 64)
+                else:
+                    color = (15, 15, 15)
+                
+                pix_s = WIDTH / GRID_W
+                x_draw = int(pix_s * x)
+                y_draw = int(pix_s * y)
+                pygame.draw.rect(window, color, (x_draw, y_draw, pix_s, pix_s))
     
-    
-    
-    x_index = int(mouse_pos[0] / WIDTH * GRID_W)
-    y_index = int(mouse_pos[1] / WIDTH * GRID_W)
+    col_index = int(mouse_pos[0] / WIDTH * GRID_W)
+    row_index = int(mouse_pos[1] / HEIGHT * GRID_W)
 
     if has_updated:
-        grid[x_index][y_index] = Element(elements[el_selected])
-            
-
+        if 0 <= col_index < GRID_W and 0 <= row_index < GRID_W:
+            with lock:
+                grid[col_index][row_index] = Element(elements[el_selected])
 
     pygame.draw.rect(window, (255, 255, 0), (mouse_pos[0] - 2, mouse_pos[1] - 2, 4, 4))
     text = font.render(f"Element: {elements[el_selected]}", True, (255, 255, 255))
@@ -98,41 +150,59 @@ while running:
     window.blit(text, text_rect)
     pygame.display.flip()
 
-    for y in range(GRID_W - 2, -1, -1):
-        for x in range(GRID_W):
-            if grid[x][y].can_fall and grid[x][y + 1].element_type == "nothing":
-                elem = grid[x][y].element_type
-                grid[x][y+1] = Element(elem)
-                grid[x][y] = Element("nothing")
-    
-    for y in range(GRID_W):
-        for x in range(GRID_W):
-            if grid[x][y].element_type == "water":
-                r = random.uniform(0, 1)
-                if r < 0.02:
-                    if random.randint(0, 1):
-                        if x > 0:   # Check left to see if we can move left
-                            if grid[x - 1][y].element_type == "nothing":
-                                grid[x][y] = Element("nothing")
-                                grid[x - 1][y] = Element("water")
-                    else:
-                        if x < GRID_W - 1:
-                            if grid[x + 1][y].element_type == "nothing":
-                                grid[x][y] = Element("nothing")
-                                grid[x + 1][y] = Element("water")
-            if grid[x][y].element_type == "cloud":
-                r = random.uniform(0, 1)
-                if r < 0.1:
-                    if random.randint(0, 1):
-                        if x > 0:
-                            if grid[x - 1][y].element_type == "nothing":
-                                grid[x][y] = Element("nothing")
-                                grid[x - 1][y] = Element("cloud")
-                    else:
-                        if x < GRID_W - 1:
-                            if grid[x + 1][y].element_type == "nothing":
-                                grid[x][y] = Element("nothing")
-                                grid[x + 1][y] = Element("cloud")
-    
+    with lock:
+        # Falling simulation
+        for y in range(GRID_W - 2, -1, -1):
+            for x in range(GRID_W):
+                if grid[x][y].can_fall and grid[x][y + 1].element_type == "nothing":
+                    elem = grid[x][y].element_type
+                    grid[x][y + 1] = Element(elem)
+                    grid[x][y] = Element("nothing")
+        
+        # Spreading simulation
+        for y in range(GRID_W):
+            for x in range(GRID_W):
+                el_type = grid[x][y].element_type
+                if el_type == "water":
+                    r = random.uniform(0, 1)
+                    if r < 0.02:
+                        direction = random.randint(0, 1)
+                        if direction == 0 and x > 0 and grid[x - 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x - 1][y] = Element("water")
+                        elif direction == 1 and x < GRID_W - 1 and grid[x + 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x + 1][y] = Element("water")
+                elif el_type == "cloud":
+                    r = random.uniform(0, 1)
+                    if r < 0.1:
+                        direction = random.randint(0, 1)
+                        if direction == 0 and x > 0 and grid[x - 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x - 1][y] = Element("cloud")
+                        elif direction == 1 and x < GRID_W - 1 and grid[x + 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x + 1][y] = Element("cloud")
+
+        # Prepare state for clients
+        state_grid = []
+        for y in range(GRID_W):  # rows
+            row = []
+            for x in range(GRID_W):  # cols
+                row.append(grid[x][y].element_type)
+            state_grid.append(row)
+        state = {'type': 'state', 'grid': state_grid}
+        state_json = json.dumps(state) + '\n'
+
+        # Send to all clients
+        for c in clients[:]:
+            try:
+                c.sendall(state_json.encode('utf-8'))
+            except Exception as e:
+                print(f"Error sending to client: {e}")
+                clients.remove(c)
+                c.close()
+
     time.sleep(0.025)
-pygame.display.quit()
+
+pygame.quit()
