@@ -16,7 +16,7 @@ grid = []
 
 has_updated = False
 
-elements = ["nothing", "sand", "water", "block", "cloud"]
+elements = ["nothing", "sand", "water", "block", "cloud", "gas"]
 
 class Element:
     def __init__(self, element_type):
@@ -127,7 +127,9 @@ while running:
                 elif el_type == "block":
                     color = (100, 100, 100)
                 elif el_type == "cloud":
-                    color = (250, 114, 64)
+                    color = (173, 216, 230)
+                elif el_type == "gas":
+                    color == (245, 11, 148)
                 else:
                     color = (15, 15, 15)
                 
@@ -183,6 +185,23 @@ while running:
                         elif direction == 1 and x < GRID_W - 1 and grid[x + 1][y].element_type == "nothing":
                             grid[x][y] = Element("nothing")
                             grid[x + 1][y] = Element("cloud")
+                elif el_type == "gas":
+                    r = random.uniform(0, 1)
+                    if r < 0.13:
+                        direction = random.randint(0, 3)
+                        if direction == 0 and x > 0 and grid[x - 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x - 1][y] = Element("gas")
+                        elif direction == 1 and x < GRID_W - 1 and grid[x + 1][y].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x + 1][y] = Element("gas")
+                        elif direction == 2 and y > 0 and grid[x][y - 1].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x][y - 1] = Element("gas")
+                        elif direction == 3 and y < GRID_W - 1 and grid[x][y + 1].element_type == "nothing":
+                            grid[x][y] = Element("nothing")
+                            grid[x][y + 1] = Element("gas")
+
 
         # Prepare state for clients
         state_grid = []
