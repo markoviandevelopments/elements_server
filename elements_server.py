@@ -9,7 +9,7 @@ ACT_ONLY_AS_SERVER = True
 if not ACT_ONLY_AS_SERVER:
     import pygame
 
-GRID_W = 20
+GRID_W = 30
 
 elements = ["nothing", "sand", "water", "block", "cloud", "gas", "void", "clone"]
 
