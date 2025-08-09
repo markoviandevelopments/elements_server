@@ -130,6 +130,10 @@ def simulate_and_send(force_sim=False):
                         elem = grid[x][y].element_type
                         grid[x][y + 1] = Element(elem)
                         grid[x][y] = Element("nothing")
+                    if grid[x][y].element_type == "sand" and grid[x][y + 1].element_type == "water" and random.uniform(0, 1) < 0.4:
+                        elem = grid[x][y].element_type
+                        grid[x][y + 1] = Element(elem)
+                        grid[x][y] = Element("water")
             
             # Spreading simulation
             for y in range(GRID_W):
