@@ -3,15 +3,22 @@ import random
 import socket
 import threading
 import json
+import pickle
 
-ACT_ONLY_AS_SERVER = True
+
+ACT_ONLY_AS_SERVER = False
+LOAD_GRID = False
+SAVE_INTERVAL = 100
+
+it_C = 0
+
 
 if not ACT_ONLY_AS_SERVER:
     import pygame
 
 GRID_W = 30
 
-elements = ["nothing", "sand", "water", "block", "cloud", "gas", "void", "clone"]
+elements = ["nothing", "sand", "water", "block", "cloud", "gas", "void", "clone", "fire"]
 
 class Element:
     def __init__(self, element_type):
@@ -46,12 +53,17 @@ class Element:
             self.cloning_element_type = "nothing"
 
 # Initialize grid as list of columns, each containing rows (grid[col][row])
-grid = []
-for x in range(GRID_W):  # columns
-    col = []
-    for y in range(GRID_W):  # rows
-        col.append(Element("nothing"))
-    grid.append(col)
+
+if LOAD_GRID:
+    with open("grid.pkl", "rb") as file:
+        grid = pickle.load(file)
+else:
+    grid = []
+    for x in range(GRID_W):  # columns
+        col = []
+        for y in range(GRID_W):  # rows
+            col.append(Element("nothing"))
+        grid.append(col)
 
 # Threading lock for grid access
 lock = threading.Lock()
@@ -108,6 +120,7 @@ def start_server():
 threading.Thread(target=start_server, daemon=True).start()
 
 def simulate_and_send(force_sim=False):
+    global it_C
     with lock:
         if force_sim or len(clients) > 0:
             # Falling simulation
@@ -166,6 +179,44 @@ def simulate_and_send(force_sim=False):
                                 if grid[x][y + 1].element_type == "nothing":
                                     grid[x][y] = Element("nothing")
                                     grid[x][y + 1] = Element("gas")
+                    elif el_type == "fire":
+                        r = random.uniform(0, 1)
+                        if r < 0.01:
+                            grid[x][y] = Element("nothing")
+                            continue
+                        r = random.uniform(0, 1)
+                        if r < 0.3:
+                            direction = random.randint(0, 2)
+                            if direction == 0 and x > 0:
+                                if grid[x - 1][y].element_type == "nothing":
+                                    grid[x][y] = Element("nothing")
+                                    grid[x - 1][y] = Element("fire")
+                            elif direction == 1 and x < GRID_W - 1:
+                                if grid[x + 1][y].element_type == "nothing":
+                                    grid[x][y] = Element("nothing")
+                                    grid[x + 1][y] = Element("fire")
+                            elif direction == 2 and y > 0:
+                                if grid[x][y - 1].element_type == "nothing":
+                                    grid[x][y] = Element("nothing")
+                                    grid[x][y - 1] = Element("fire")
+
+                        for i in range(5):
+                            r = random.uniform(0, 1)
+                            if r < 0.4:
+                                direction = random.randint(0, 3)
+                                if direction == 0 and x > 0:
+                                    if grid[x - 1][y].element_type == "gas":
+                                        grid[x - 1][y] = Element("fire")
+                                elif direction == 1 and x < GRID_W - 1:
+                                    if grid[x + 1][y].element_type == "gas":
+                                        grid[x + 1][y] = Element("fire")
+                                elif direction == 2 and y > 0:
+                                    if grid[x][y - 1].element_type == "gas":
+                                        grid[x][y - 1] = Element("fire")
+                                elif direction == 3 and y < GRID_W - 1:
+                                    if grid[x][y + 1].element_type == "gas":
+                                        grid[x][y + 1] = Element("fire")
+                            
                     elif el_type == "void":
                         if x > 0:
                             if grid[x - 1][y].voided_by_void:
@@ -209,6 +260,7 @@ def simulate_and_send(force_sim=False):
                                 if direction == 3 and y < GRID_W - 1:
                                     if grid[x][y + 1].element_type == "nothing":
                                         grid[x][y + 1] = Element(grid[x][y].cloning_element_type)
+        
 
         if len(clients) > 0:
             # Prepare state for clients
@@ -229,6 +281,18 @@ def simulate_and_send(force_sim=False):
                     print(f"Error sending to client: {e}")
                     clients.remove(c)
                     c.close()
+    if it_C % SAVE_INTERVAL == 0 and it_C > 0:
+        save_grid()
+    it_C += 1
+
+def save_grid():
+    try:
+        with open("grid.pkl", "wb") as file:
+            pickle.dump(grid, file)  # Save the grid object, not the filename
+        #print("Grid saved successfully to grid.pkl")
+    except Exception as e:
+        print(f"Error saving grid: {e}")
+
 
 if ACT_ONLY_AS_SERVER:
     while True:
@@ -279,6 +343,8 @@ else:
                         color = (30, 0, 0)
                     elif el_type == "clone":
                         color = (255, 255, 0)
+                    elif el_type == "fire":
+                        color = (255, 0, 0)
                     else:
                         color = (15, 15, 15)
                     
