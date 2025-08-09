@@ -49,6 +49,8 @@ class Element:
         else:
             self.cloned_by_clone = False
         
+        self.alive = False
+        
         if element_type == "clone":
             self.cloning_element_type = "nothing"
 
@@ -128,8 +130,11 @@ def simulate_and_send(force_sim=False):
                 for x in range(GRID_W):
                     if grid[x][y].can_fall and grid[x][y + 1].element_type == "nothing":
                         elem = grid[x][y].element_type
+                        is_alive = grid[x][y].alive
                         grid[x][y + 1] = Element(elem)
+                        grid[x][y + 1].alive = is_alive
                         grid[x][y] = Element("nothing")
+                        grid[x][y].alive = False
                     if grid[x][y].element_type == "sand" and grid[x][y + 1].element_type == "water" and random.uniform(0, 1) < 0.4:
                         elem = grid[x][y].element_type
                         grid[x][y + 1] = Element(elem)
@@ -267,9 +272,23 @@ def simulate_and_send(force_sim=False):
                     elif el_type == "plant":
                         r = random.uniform(0, 1)
                         if r < 0.01:
-                            if y < GRID_W - 1 and (grid[x][y + 1].element_type == "soil" or grid[x][y + 1].element_type == "plant"):
+                            if y < GRID_W - 1 and (grid[x][y + 1].element_type == "soil" or (grid[x][y + 1].element_type == "plant" and grid[x][y + 1].alive)):
+                                if grid[x][y + 1].element_type == "soil":
+                                    grid[x][y].alive = True
                                 if grid[x][y - 1].element_type == "nothing" or "water":
                                     grid[x][y - 1] = Element("plant")
+                                    grid[x][y - 1].alive = True
+                        r = random.uniform(0, 1)
+                        if r < 0.001:
+                            direction = random.randint(0, 1)
+                            if direction and x > 0:
+                                if grid[x - 1][y].element_type == "nothing":
+                                    grid[x - 1][y] = Element("plant")
+                                    grid[x - 1][y].alive = False
+                            elif x < GRID_W - 1:
+                                grid[x + 1][y] = Element("plant")
+                                grid[x + 1][y].alive = False
+
         
 
         if len(clients) > 0:
