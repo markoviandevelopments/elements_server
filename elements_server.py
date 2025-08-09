@@ -18,13 +18,13 @@ if not ACT_ONLY_AS_SERVER:
 
 GRID_W = 30
 
-elements = ["nothing", "sand", "water", "block", "cloud", "gas", "void", "clone", "fire"]
+elements = ["nothing", "sand", "water", "stone", "cloud", "gas", "void", "clone", "fire", "soil", "plant"]
 
 class Element:
     def __init__(self, element_type):
         self.element_type = element_type
         self.can_fall = False
-        if self.element_type == "sand" or self.element_type == "water":
+        if self.element_type == "sand" or self.element_type == "water" or self.element_type == "plant":
             self.can_fall = True
         else:
             self.can_fall = False
@@ -39,12 +39,12 @@ class Element:
         else:
             self.is_gas = False
         
-        if element_type != "nothing" and element_type != "block" and element_type != "void" and element_type != "clone":
+        if element_type != "nothing" and element_type != "stone" and element_type != "void" and element_type != "clone" and element_type != "soil":
             self.voided_by_void = True
         else:
             self.voided_by_void = False
         
-        if element_type != "nothing" and element_type != "block" and element_type != "void" and element_type != "clone":
+        if element_type != "nothing" and element_type != "stone" and element_type != "void" and element_type != "clone" and element_type != "soil":
             self.cloned_by_clone = True
         else:
             self.cloned_by_clone = False
@@ -264,6 +264,12 @@ def simulate_and_send(force_sim=False):
                                 if direction == 3 and y < GRID_W - 1:
                                     if grid[x][y + 1].element_type == "nothing":
                                         grid[x][y + 1] = Element(grid[x][y].cloning_element_type)
+                    elif el_type == "plant":
+                        r = random.uniform(0, 1)
+                        if r < 0.01:
+                            if y < GRID_W - 1 and (grid[x][y + 1].element_type == "soil" or grid[x][y + 1].element_type == "plant"):
+                                if grid[x][y - 1].element_type == "nothing" or "water":
+                                    grid[x][y - 1] = Element("plant")
         
 
         if len(clients) > 0:
@@ -337,7 +343,7 @@ else:
                         color = (100, 100, 10)
                     elif el_type == "water":
                         color = (0, 0, 255)
-                    elif el_type == "block":
+                    elif el_type == "stone":
                         color = (100, 100, 100)
                     elif el_type == "cloud":
                         color = (173, 216, 230)
@@ -349,6 +355,10 @@ else:
                         color = (255, 255, 0)
                     elif el_type == "fire":
                         color = (255, 0, 0)
+                    elif el_type == "soil":
+                        color = (175, 114, 78)
+                    elif el_type == "plant":
+                        color = (107, 142, 35)
                     else:
                         color = (15, 15, 15)
                     
